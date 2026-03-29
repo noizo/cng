@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200" width="240" height="200">
+  <defs>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#58a6ff"/>
+      <stop offset="100%" stop-color="#a371f7"/>
+    </linearGradient>
+    <linearGradient id="inner" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#238636"/>
+      <stop offset="100%" stop-color="#58a6ff"/>
+    </linearGradient>
+  </defs>
+  <!-- outer hexagon -->
+  <polygon points="100,10 178,55 178,145 100,190 22,145 22,55"
+    fill="none" stroke="url(#glow)" stroke-width="3" opacity="0.6"/>
+  <!-- inner hexagon -->
+  <polygon points="100,35 155,67.5 155,132.5 100,165 45,132.5 45,67.5"
+    fill="#0d1117" stroke="url(#glow)" stroke-width="2"/>
+  <!-- robot eyes -->
+  <circle cx="78" cy="90" r="8" fill="url(#inner)"/>
+  <circle cx="122" cy="90" r="8" fill="url(#inner)"/>
+  <circle cx="75" cy="87" r="3" fill="#c9d1d9" opacity="0.8"/>
+  <circle cx="119" cy="87" r="3" fill="#c9d1d9" opacity="0.8"/>
+  <!-- mouth -->
+  <path d="M 78 118 Q 100 135 122 118" fill="none" stroke="url(#inner)" stroke-width="3" stroke-linecap="round"/>
+  <!-- antenna -->
+  <line x1="100" y1="35" x2="100" y2="18" stroke="url(#glow)" stroke-width="2"/>
+  <circle cx="100" cy="14" r="4" fill="#58a6ff"/>
+  <!-- signal arcs -->
+  <path d="M 88 20 Q 100 5 112 20" fill="none" stroke="#58a6ff" stroke-width="1.5" opacity="0.5"/>
+  <path d="M 82 25 Q 100 5 118 25" fill="none" stroke="#a371f7" stroke-width="1" opacity="0.3"/>
+  <!-- neuron dots -->
+  <circle cx="100" cy="10" r="3" fill="#58a6ff" opacity="0.4"/>
+  <circle cx="178" cy="55" r="3" fill="#a371f7" opacity="0.4"/>
+  <circle cx="178" cy="145" r="3" fill="#58a6ff" opacity="0.4"/>
+  <circle cx="100" cy="190" r="3" fill="#a371f7" opacity="0.4"/>
+  <circle cx="22" cy="145" r="3" fill="#58a6ff" opacity="0.4"/>
+  <circle cx="22" cy="55" r="3" fill="#a371f7" opacity="0.4"/>
+  <!-- CNG text -->
+  <text x="205" y="95" font-family="system-ui,-apple-system,sans-serif" font-size="32" font-weight="700" fill="#f0f6fc" text-anchor="middle">CNG</text>
+  <text x="205" y="118" font-family="system-ui,-apple-system,sans-serif" font-size="9" fill="#8b949e" text-anchor="middle">Cloudflare</text>
+  <text x="205" y="130" font-family="system-ui,-apple-system,sans-serif" font-size="9" fill="#8b949e" text-anchor="middle">Neuron Gate</text>
+</svg>
