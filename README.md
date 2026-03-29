@@ -14,16 +14,15 @@ Cloudflare Workers AI  ←──  Qwen, Flux, Whisper, Deepgram, Llama Guard ...
 
 ## What it does
 
-- **Chat completions** — streaming and non-streaming, tool calls, vision
+- **Chat completions** — streaming and non-streaming, tool calls
 - **Image generation** — Flux 2, Flux 1, Leonardo Phoenix, SDXL Lightning
 - **Image editing** — SD v1.5 inpainting
 - **Audio transcription & translation** — Whisper v3 Turbo
 - **Text-to-speech** — Deepgram Aura 2, MeloTTS
 - **Embeddings** — BGE-M3
 - **Content moderation** — Llama Guard 3
-- **Text translation** — M2M100
-- **Model aliasing** — per-user toggle to map `gpt-4o` → `qwen3-30b-a3b-fp8`, `dall-e-3` → `flux-2-klein-4b`, etc.
-- **Config panel** — web UI for models, aliases, users, live cost tracking, model discovery
+- **Model aliasing & spoofing** — map `gpt-4o` → `qwen3-30b-a3b-fp8`, `dall-e-3` → `flux-2-klein-4b`, etc. Per-key spoof mode hides real models from `/v1/models`
+- **Config panel** — web UI for models, aliases, users, live cost tracking
 - **ASCII status** — `curl /status` for terminal dashboards
 - **Multi-key auth** — per-key rate limits, KV-backed user management
 - **Dual mode** — works on free tier (in-memory) or paid (KV-persistent)
@@ -50,9 +49,8 @@ wrangler login
 ### Option B: Manual (wrangler)
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/noizo/cng.git
-cd cng
+# 1. Copy the worker files
+cp wrangler.toml my-wrangler.toml  # or edit in place
 
 # 2. Edit wrangler.toml — set worker name
 #    Optionally uncomment KV section
@@ -71,14 +69,14 @@ echo "$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')" | wrangler secret p
 
 ### Option C: Terraform (infrastructure-as-code)
 
-For teams or reproducible deployments:
+For teams or reproducible deployments.
 
 ```hcl
 resource "cloudflare_workers_script" "cng" {
-  account_id  = var.cloudflare_account_id
+  account_id = var.cloudflare_account_id
   script_name = "cng"
-  content     = file("${path.module}/index.js")
-  module      = true
+  content    = file("${path.module}/../../workers/llm-fallback/index.js")
+  module     = true
 
   bindings {
     name = "CF_ACCOUNT_ID"
@@ -146,7 +144,7 @@ Authorization: Bearer <your-api-key>
 Three ways to specify a model:
 
 ```bash
-# Short name (auto-derived from path)
+# Short name
 curl ... -d '{"model": "qwen3-30b-a3b-fp8", ...}'
 
 # Full Cloudflare path
@@ -229,14 +227,11 @@ curl -H "Authorization: Bearer $KEY" https://your-worker.workers.dev/status
 
 ```
 ╭────────────────────────────────────────────────╮
-│          Cloudflare Neuron Gate                 │
-│                                                │
-│        ○                                       │
-│        │                                       │
-│      ╱───╲                                     │
-│    ╱  ● ●  ╲    CNG                            │
-│    ╲   ◠   ╱    2026-03-29 12:00 UTC           │
-│      ╲───╱                                     │
+│    ┌─────┐                                     │
+│    │ • • │   CNG · Neuron Gate                 │
+│    │  ◡  │   2026-03-29 12:00 UTC              │
+│    └──┬──┘                                     │
+│       │                                        │
 ├────────────────────────────────────────────────┤
 │ Neurons   1.2k / 10k         8.8k left   $0.00│
 │   █████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░ │
@@ -271,6 +266,68 @@ To persist config without KV, use the Export JSON button, then:
 ```bash
 wrangler kv key put --namespace-id=<id> gateway-config --path=cng-config.json
 ```
+
+## Available models
+
+### Chat
+| Short name | Cloudflare model |
+|-----------|-----------------|
+| `qwen3-30b-a3b-fp8` | `@cf/qwen/qwen3-30b-a3b-fp8` |
+| `qwen2.5-coder-32b-instruct` | `@cf/qwen/qwen2.5-coder-32b-instruct` |
+| `glm-4.7-flash` | `@cf/zai-org/glm-4.7-flash` |
+| `gpt-oss-20b` | `@cf/openai/gpt-oss-20b` |
+| `gpt-oss-120b` | `@cf/openai/gpt-oss-120b` |
+
+### Image
+| Short name | Cloudflare model | Max size |
+|-----------|-----------------|----------|
+| `flux-2-klein-4b` | `@cf/black-forest-labs/flux-2-klein-4b` | 1920px |
+| `flux-1-schnell` | `@cf/black-forest-labs/flux-1-schnell` | 1024px |
+| `phoenix-1.0` | `@cf/leonardo/phoenix-1.0` | 2048px |
+| `sdxl-lightning` | `@cf/bytedance/stable-diffusion-xl-lightning` | 1024px |
+| `dreamshaper-8-lcm` | `@cf/lykon/dreamshaper-8-lcm` | 1024px |
+
+### Audio
+| Short name | Cloudflare model | Type |
+|-----------|-----------------|------|
+| `whisper-large-v3-turbo` | `@cf/openai/whisper-large-v3-turbo` | STT |
+| `aura-2-en` | `@cf/deepgram/aura-2-en` | TTS |
+| `aura-2-es` | `@cf/deepgram/aura-2-es` | TTS |
+| `melotts` | `@cf/myshell-ai/melotts` | TTS |
+
+### Other
+| Short name | Cloudflare model | Type |
+|-----------|-----------------|------|
+| `bge-m3` | `@cf/baai/bge-m3` | Embedding |
+| `llama-guard-3-8b` | `@cf/meta/llama-guard-3-8b` | Moderation |
+
+## Alias spoofing
+
+Aliases let you map familiar names (like `gpt-4o`) to real Cloudflare models (like `qwen3-30b-a3b-fp8`). Aliases always resolve for every API key — if a client sends `"model": "gpt-4o"`, the gateway routes it to the mapped backend regardless of spoof mode.
+
+**Spoof mode** controls what `/v1/models` returns for a given API key:
+
+| Spoof aliases | `/v1/models` returns | Use case |
+|---------------|---------------------|----------|
+| **OFF** (default) | Real Cloudflare model IDs (`qwen3-30b-a3b-fp8`, `flux-2-klein-4b`, ...) | Direct usage, development, transparency |
+| **ON** | Only alias names (`gpt-4o`, `dall-e-3`, `whisper-1`, ...) — real models hidden | Drop-in OpenAI replacement for clients that expect OpenAI model names |
+
+### Why spoof?
+
+Many OpenAI-compatible clients (chat UIs, plugins, automation tools) query `/v1/models` to populate their model selector. If they see unfamiliar names like `qwen3-30b-a3b-fp8`, they either:
+- Don't display them (hard-coded OpenAI model lists)
+- Show confusing names to end users
+- Fail validation checks
+
+With spoof ON, the client sees `gpt-4o`, `dall-e-3`, `whisper-1` — names it expects. The gateway transparently routes these to the configured Cloudflare backends. From the client's perspective, it's talking to OpenAI.
+
+### Per-key control
+
+Spoof is toggled per API key in the config panel. This lets you run mixed setups:
+- **Key A (spoof ON)** — used by a chat UI that expects OpenAI names
+- **Key B (spoof OFF)** — used by scripts or direct API calls that use real model IDs
+
+Both keys can use aliases in their requests regardless of the spoof setting.
 
 ## OpenAI SDK compatibility
 
@@ -316,20 +373,11 @@ Cloudflare Workers AI uses **neurons** as the billing unit.
 
 The `/status` endpoint and config panel show real-time neuron usage and cost projections.
 
-## Security notes
-
-- API keys are compared with timing-safe equality checks
-- KV user key hashes use SHA-256; raw keys are shown only once on creation
-- The `/api/config` endpoint strips sensitive fields (key hashes) from responses
-- All user-controlled strings in the config UI are HTML-escaped and JS-context-escaped
-- The config panel is single-tenant: any valid key can modify configuration. For multi-tenant use, consider splitting admin/client keys
-
 ## Roadmap / nice to have
 
-- **WebSocket audio streaming** — real-time STT/TTS via WebSocket proxy for models like Deepgram Nova 3
-- **Auto-sync pricing** — CF model search API doesn't expose pricing for all models; a periodic scrape or cache of the CF docs pricing table could fill the gaps
-- **Config versioning** — KV-backed config history / rollback
-- **Admin role separation** — separate admin key for config/user management vs regular API keys
+- **WebSocket audio streaming** — real-time STT/TTS via WebSocket proxy for models like Deepgram Nova 3 and Flux (WebSocket mode). Would enable live transcription and voice chat use cases beyond the current batch HTTP endpoints.
+- **Auto-sync pricing** — CF model search API doesn't expose pricing for all models; a periodic scrape or cache of the CF docs pricing table could fill the gaps.
+- **Config versioning** — KV-backed config history / rollback.
 
 ## License
 

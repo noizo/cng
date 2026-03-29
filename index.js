@@ -13,26 +13,22 @@ function buildRuntimeMaps(cfg) {
 
   const contextMap = {};
   for (const m of cfg.chatModels || []) {
-    if (!m.enabled) continue;
     chatMap[m.id] = m.path;
     chatMap[m.path] = m.path;
     if (m.vision) visionSet.add(m.path);
     if (m.contextWindow) contextMap[m.path] = m.contextWindow;
   }
   for (const m of cfg.imageModels || []) {
-    if (!m.enabled) continue;
     imageMap[m.id] = m.path;
     imageMap[m.path] = m.path;
     if (m.multipart) multipartSet.add(m.path);
     if (m.inpainting && !inpaintingModel) inpaintingModel = m.path;
   }
   for (const m of cfg.voiceModels || []) {
-    if (!m.enabled) continue;
     if (m.kind === "stt") { sttMap[m.id] = m.path; sttMap[m.path] = m.path; }
     if (m.kind === "tts") { ttsMap[m.id] = m.path; ttsMap[m.path] = m.path; }
   }
   for (const m of cfg.utilityModels || []) {
-    if (!m.enabled) continue;
     if (m.kind === "embedding") { embeddingMap[m.id] = m.path; embeddingMap[m.path] = m.path; }
     if (m.kind === "translation") { translationMap[m.id] = m.path; translationMap[m.path] = m.path; }
     if (m.kind === "moderation" && !moderationModel) moderationModel = m.path;
@@ -40,7 +36,7 @@ function buildRuntimeMaps(cfg) {
 
   const modelIdToPath = {};
   for (const list of [cfg.chatModels, cfg.imageModels, cfg.voiceModels]) {
-    for (const m of list || []) { if (m.enabled) modelIdToPath[m.id] = m.path; }
+    for (const m of list || []) { modelIdToPath[m.id] = m.path; }
   }
   for (const a of cfg.aliases || []) {
     const targetPath = modelIdToPath[a.target];
@@ -51,8 +47,8 @@ function buildRuntimeMaps(cfg) {
 }
 
 const API_KEYS = {
-  rudi:  { envKey: "API_KEY",   rpm: 60 },
-  key2:  { envKey: "API_KEY_2", rpm: 20 },
+  admin:  { envKey: "API_KEY",   rpm: 60 },
+  user1:  { envKey: "API_KEY_2", rpm: 20 },
 };
 
 const rateBuckets = new Map();
@@ -230,7 +226,6 @@ async function fetchStatusData(env) {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
   const dayOfMonth = now.getUTCDate();
-  const workerName = env.WORKER_NAME || "cng";
 
   const gql = `{
     viewer {
@@ -256,7 +251,7 @@ async function fetchStatusData(env) {
           filter: {
             datetime_geq: "${todayStart.toISOString()}"
             datetime_leq: "${now.toISOString()}"
-            scriptName: "${workerName}"
+            scriptName: "${env.WORKER_NAME || "cng"}"
           }
         ) {
           sum { requests errors subrequests }
@@ -346,7 +341,7 @@ async function fetchStatusData(env) {
     },
     ai_requests: { total: totalRequests },
     worker: {
-      name: workerName,
+      name: env.WORKER_NAME || "cng",
       invocations: invocations.requests,
       errors: invocations.errors,
     },
@@ -627,24 +622,24 @@ async function callImageMultipart(env, model, prompt, width, height) {
 
 function handleListModels(cfg, spoofed) {
   const data = [];
-  const ownerFromPath = (p) => { const parts = p.split("/"); return parts.length >= 3 ? parts[2] : "system"; };
-
-  for (const m of cfg.chatModels || []) {
-    if (m.enabled) data.push({ id: m.id, object: "model", owned_by: ownerFromPath(m.path) });
-  }
-  for (const m of cfg.imageModels || []) {
-    if (m.enabled) data.push({ id: m.id, object: "model", owned_by: ownerFromPath(m.path) });
-  }
-  for (const m of cfg.voiceModels || []) {
-    if (m.enabled) data.push({ id: m.id, object: "model", owned_by: ownerFromPath(m.path) });
-  }
-  for (const m of cfg.utilityModels || []) {
-    if (m.enabled) data.push({ id: m.id, object: "model", owned_by: ownerFromPath(m.path) });
-  }
 
   if (spoofed) {
     for (const a of cfg.aliases || []) {
-      data.unshift({ id: a.name, object: "model", owned_by: "system" });
+      data.push({ id: a.name, object: "model", owned_by: "openai" });
+    }
+  } else {
+    const ownerFromPath = (p) => { const parts = p.split("/"); return parts.length >= 3 ? parts[2] : "system"; };
+    for (const m of cfg.chatModels || []) {
+      data.push({ id: m.id, object: "model", owned_by: ownerFromPath(m.path) });
+    }
+    for (const m of cfg.imageModels || []) {
+      data.push({ id: m.id, object: "model", owned_by: ownerFromPath(m.path) });
+    }
+    for (const m of cfg.voiceModels || []) {
+      data.push({ id: m.id, object: "model", owned_by: ownerFromPath(m.path) });
+    }
+    for (const m of cfg.utilityModels || []) {
+      data.push({ id: m.id, object: "model", owned_by: ownerFromPath(m.path) });
     }
   }
 
@@ -1355,11 +1350,12 @@ async function handleDiscover(env, cfg) {
 async function handleGetUsers(env) {
   const config = await loadConfig(env);
   const spoofed = config.spoofedKeys || [];
+  const names = config.keyNames || {};
   const envUsers = Object.entries(API_KEYS).map(([id, cfg]) => ({
-    id, rpm: cfg.rpm, source: "env", spoofed: spoofed.includes(id),
+    id, name: names[id] || id, rpm: cfg.rpm, source: "env", spoofed: spoofed.includes(id),
   }));
   const kvUsers = (config.users || []).map(u => ({
-    id: u.id, rpm: u.rpm, keyPreview: u.keyPreview || "****",
+    id: u.id, name: names[u.id] || u.id, rpm: u.rpm, keyPreview: u.keyPreview || "****",
     created: u.created || "", source: "kv", spoofed: spoofed.includes(u.id),
   }));
   const rateState = {};
@@ -1425,41 +1421,45 @@ async function handleUserAction(request, env) {
     return Response.json({ ok: true, spoofed: config.spoofedKeys.includes(body.id), storage });
   }
 
+  if (body.action === "rename_key") {
+    if (!body.id || typeof body.name !== "string") return Response.json({ error: "Missing id or name" }, { status: 400 });
+    if (!config.keyNames) config.keyNames = {};
+    const trimmed = body.name.trim().slice(0, 128);
+    if (trimmed && trimmed !== body.id) config.keyNames[body.id] = trimmed;
+    else delete config.keyNames[body.id];
+    const storage = await persist();
+    return Response.json({ ok: true, name: trimmed || body.id, storage });
+  }
+
   return Response.json({ error: "Unknown action" }, { status: 400 });
 }
 
 const DEFAULT_CONFIG = {
   imageModels: [
-    { id: "flux-2-klein-4b", path: "@cf/black-forest-labs/flux-2-klein-4b", enabled: true, multipart: true, maxDim: 1920, label: "Flux 2 Klein 4B" },
-    { id: "flux-1-schnell", path: "@cf/black-forest-labs/flux-1-schnell", enabled: true, multipart: false, maxDim: 1024, label: "Flux 1 Schnell" },
-    { id: "phoenix-1.0", path: "@cf/leonardo/phoenix-1.0", enabled: true, multipart: false, maxDim: 2048, label: "Leonardo Phoenix 1.0" },
-    { id: "sdxl-lightning", path: "@cf/bytedance/stable-diffusion-xl-lightning", enabled: false, multipart: false, maxDim: 1024, label: "SDXL Lightning" },
-    { id: "dreamshaper-8-lcm", path: "@cf/lykon/dreamshaper-8-lcm", enabled: false, multipart: false, maxDim: 1024, label: "Dreamshaper 8 LCM" },
-    { id: "sd-v1-5-inpainting", path: "@cf/runwayml/stable-diffusion-v1-5-inpainting", enabled: true, multipart: false, maxDim: 512, label: "SD 1.5 Inpainting", inpainting: true },
+    { id: "flux-2-klein-4b", path: "@cf/black-forest-labs/flux-2-klein-4b", multipart: true, maxDim: 1920, label: "Flux 2 Klein 4B" },
+    { id: "flux-1-schnell", path: "@cf/black-forest-labs/flux-1-schnell", multipart: false, maxDim: 1024, label: "Flux 1 Schnell" },
+    { id: "phoenix-1.0", path: "@cf/leonardo/phoenix-1.0", multipart: false, maxDim: 2048, label: "Leonardo Phoenix 1.0" },
+    { id: "sd-v1-5-inpainting", path: "@cf/runwayml/stable-diffusion-v1-5-inpainting", multipart: false, maxDim: 512, label: "SD 1.5 Inpainting", inpainting: true },
   ],
   chatModels: [
-    { id: "qwen3-30b-a3b-fp8", path: "@cf/qwen/qwen3-30b-a3b-fp8", enabled: true, label: "Qwen3 30B", vision: false, contextWindow: 32768 },
-    { id: "qwen2.5-coder-32b-instruct", path: "@cf/qwen/qwen2.5-coder-32b-instruct", enabled: true, label: "Qwen 2.5 Coder 32B", vision: false, contextWindow: 32768 },
-    { id: "glm-4.7-flash", path: "@cf/zai-org/glm-4.7-flash", enabled: true, label: "GLM 4.7 Flash", vision: false, contextWindow: 131072 },
-    { id: "gpt-oss-20b", path: "@cf/openai/gpt-oss-20b", enabled: true, label: "GPT-OSS 20B", vision: false, contextWindow: 128000 },
-    { id: "gpt-oss-120b", path: "@cf/openai/gpt-oss-120b", enabled: true, label: "GPT-OSS 120B", vision: false, contextWindow: 128000 },
-    { id: "llama-4-scout-17b-16e-instruct", path: "@cf/meta/llama-4-scout-17b-16e-instruct", enabled: true, label: "Llama 4 Scout 17B", vision: true, contextWindow: 131072 },
-    { id: "llama-3.2-11b-vision-instruct", path: "@cf/meta/llama-3.2-11b-vision-instruct", enabled: false, label: "Llama 3.2 11B Vision", vision: true, contextWindow: 131072 },
+    { id: "qwen3-30b-a3b-fp8", path: "@cf/qwen/qwen3-30b-a3b-fp8", label: "Qwen3 30B", vision: false, contextWindow: 32768 },
+    { id: "qwen2.5-coder-32b-instruct", path: "@cf/qwen/qwen2.5-coder-32b-instruct", label: "Qwen 2.5 Coder 32B", vision: false, contextWindow: 32768 },
+    { id: "glm-4.7-flash", path: "@cf/zai-org/glm-4.7-flash", label: "GLM 4.7 Flash", vision: false, contextWindow: 131072 },
+    { id: "gpt-oss-20b", path: "@cf/openai/gpt-oss-20b", label: "GPT-OSS 20B", vision: false, contextWindow: 128000 },
+    { id: "gpt-oss-120b", path: "@cf/openai/gpt-oss-120b", label: "GPT-OSS 120B", vision: false, contextWindow: 128000 },
+    { id: "llama-4-scout-17b-16e-instruct", path: "@cf/meta/llama-4-scout-17b-16e-instruct", label: "Llama 4 Scout 17B", vision: true, contextWindow: 131072 },
   ],
   voiceModels: [
-    { id: "whisper-large-v3-turbo", path: "@cf/openai/whisper-large-v3-turbo", enabled: true, label: "Whisper v3 Turbo", kind: "stt" },
-    { id: "whisper", path: "@cf/openai/whisper", enabled: false, label: "Whisper", kind: "stt" },
-    { id: "aura-2-en", path: "@cf/deepgram/aura-2-en", enabled: true, label: "Aura 2 EN", kind: "tts" },
-    { id: "aura-2-es", path: "@cf/deepgram/aura-2-es", enabled: true, label: "Aura 2 ES", kind: "tts" },
-    { id: "aura-1", path: "@cf/deepgram/aura-1", enabled: false, label: "Aura 1", kind: "tts" },
-    { id: "melotts", path: "@cf/myshell-ai/melotts", enabled: true, label: "MeloTTS", kind: "tts" },
+    { id: "whisper-large-v3-turbo", path: "@cf/openai/whisper-large-v3-turbo", label: "Whisper v3 Turbo", kind: "stt" },
+    { id: "aura-2-en", path: "@cf/deepgram/aura-2-en", label: "Aura 2 EN", kind: "tts" },
+    { id: "aura-2-es", path: "@cf/deepgram/aura-2-es", label: "Aura 2 ES", kind: "tts" },
+    { id: "melotts", path: "@cf/myshell-ai/melotts", label: "MeloTTS", kind: "tts" },
   ],
   utilityModels: [
-    { id: "bge-m3", path: "@cf/baai/bge-m3", enabled: true, label: "BGE-M3", kind: "embedding" },
-    { id: "bge-large-en-v1.5", path: "@cf/baai/bge-large-en-v1.5", enabled: true, label: "BGE Large EN", kind: "embedding" },
-    { id: "bge-base-en-v1.5", path: "@cf/baai/bge-base-en-v1.5", enabled: false, label: "BGE Base EN", kind: "embedding" },
-    { id: "m2m100-1.2b", path: "@cf/meta/m2m100-1.2b", enabled: true, label: "M2M100 1.2B", kind: "translation" },
-    { id: "llama-guard-3-8b", path: "@cf/meta/llama-guard-3-8b", enabled: true, label: "Llama Guard 3", kind: "moderation" },
+    { id: "bge-m3", path: "@cf/baai/bge-m3", label: "BGE-M3", kind: "embedding" },
+    { id: "bge-large-en-v1.5", path: "@cf/baai/bge-large-en-v1.5", label: "BGE Large EN", kind: "embedding" },
+    { id: "m2m100-1.2b", path: "@cf/meta/m2m100-1.2b", label: "M2M100 1.2B", kind: "translation" },
+    { id: "llama-guard-3-8b", path: "@cf/meta/llama-guard-3-8b", label: "Llama Guard 3", kind: "moderation" },
   ],
   aliases: [
     { name: "gpt-4o", target: "qwen3-30b-a3b-fp8", type: "chat" },
@@ -1473,14 +1473,15 @@ const DEFAULT_CONFIG = {
     { name: "tts-1-hd", target: "aura-2-en", type: "voice" },
   ],
   spoofedKeys: [],
+  keyNames: {},
 };
 
 let _cfgCache = null;
 let _cfgCacheTime = 0;
 
-async function loadConfig(env) {
+async function loadConfig(env, skipCache) {
   const now = Date.now();
-  if (_cfgCache && now - _cfgCacheTime < 30000) return _cfgCache;
+  if (!skipCache && _cfgCache && now - _cfgCacheTime < 30000) return _cfgCache;
   if (!env.CONFIG) return DEFAULT_CONFIG;
   const raw = await env.CONFIG.get("gateway-config", "json").catch(() => null);
   _cfgCache = raw ? { ...DEFAULT_CONFIG, ...raw } : DEFAULT_CONFIG;
@@ -1502,6 +1503,10 @@ async function handleSaveConfig(request, env) {
   try { body = await request.json(); } catch {
     return Response.json({ error: "Invalid JSON" }, { status: 400 });
   }
+  const prev = await loadConfig(env, true);
+  body.users = prev.users || [];
+  body.spoofedKeys = prev.spoofedKeys || [];
+  body.keyNames = prev.keyNames || {};
   _cfgCache = body;
   _cfgCacheTime = Date.now();
   if (env.CONFIG) {
@@ -1523,13 +1528,20 @@ const CONFIG_HTML = `<!DOCTYPE html>
 body{background:#0d1117;color:#c9d1d9;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;padding:20px;max-width:1600px;margin:0 auto}
 h1{color:#58a6ff;font-size:1.4em;margin-bottom:4px}
 .sub{color:#8b949e;font-size:.85em;margin-bottom:20px}
-.columns{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:start}
+.columns{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;align-items:stretch}
 @media(max-width:1200px){.columns{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.columns{grid-template-columns:1fr}}
 .section-title{color:#f0f6fc;font-size:1.15em;font-weight:700;margin:24px 0 12px;padding-bottom:6px;border-bottom:2px solid #21262d}
-.discover-panel{margin-top:16px;padding:16px;background:#161b22;border:1px solid #21262d;border-radius:8px}
-.discover-panel h3{color:#f0f6fc;font-size:1em;margin:14px 0 8px;border-bottom:1px solid #21262d;padding-bottom:4px}
-.discover-panel h3:first-child{margin-top:0}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+@media(max-width:900px){.two-col{grid-template-columns:1fr}}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-box{background:#0d1117;border:1px solid #30363d;border-radius:12px;width:90vw;max-width:800px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6)}
+.modal-header{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid #21262d}
+.modal-header .modal-title{flex:1;color:#f0f6fc;font-weight:700;font-size:1.05em}
+.modal-body{overflow-y:auto;padding:16px 20px}
+.modal-footer{padding:10px 20px;border-top:1px solid #21262d;font-size:.8em;color:#8b949e}
+.modal-footer a{color:#58a6ff;text-decoration:none}
 .d-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px}
 .d-card{display:flex;flex-direction:column;gap:4px;padding:8px 10px;background:#161b22;border:1px solid #30363d;border-radius:6px}
 .d-card:hover{border-color:#58a6ff;background:#1c2129}
@@ -1555,7 +1567,10 @@ h1{color:#58a6ff;font-size:1.4em;margin-bottom:4px}
 .d-add{background:#238636;color:#fff;border:none;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:.75em;white-space:nowrap}
 .d-add:hover{background:#2ea043}
 .d-add:disabled{background:#21262d;color:#8b949e;cursor:default}
-.col{}
+.col{min-width:0;overflow:hidden;display:flex;flex-direction:column}
+.col-scroll{flex:1;overflow-y:auto;max-height:55vh;min-height:80px;scrollbar-width:thin;scrollbar-color:#30363d transparent}
+.col-scroll::-webkit-scrollbar{width:5px}
+.col-scroll::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
 h2{color:#f0f6fc;font-size:1.1em;margin:0 0 12px;border-bottom:1px solid #21262d;padding-bottom:6px}
 .card{display:flex;align-items:center;gap:12px;padding:10px 12px;background:#161b22;border:1px solid #21262d;border-radius:8px;margin-bottom:8px}
 .card .info{flex:1;min-width:0}
@@ -1577,9 +1592,11 @@ h2{color:#f0f6fc;font-size:1.1em;margin:0 0 12px;border-bottom:1px solid #21262d
 .alias-row select{flex:1;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:5px 8px;font-size:.85em}
 .alias-row select:focus{border-color:#58a6ff;outline:none}
 .alias-row .type-badge{font-size:.7em;padding:2px 6px;border-radius:4px;color:#8b949e;border:1px solid #30363d}
+.spoof-lbl{color:#8b949e;font-size:.75em;cursor:help;white-space:nowrap;border-bottom:1px dotted #8b949e}
+.inline-name:hover{border-bottom-color:#30363d !important}
 .info-i{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;border:1px solid #8b949e;color:#8b949e;font-size:.6em;font-weight:700;cursor:help;margin-left:4px;vertical-align:middle;font-style:normal}
-.alias-row .del{background:none;border:1px solid #30363d;color:#da3633;cursor:pointer;padding:3px 8px;border-radius:4px;font-size:.8em}
-.alias-row .del:hover{border-color:#da3633}
+.del{background:none;border:1px solid #30363d;color:#8b949e;cursor:pointer;padding:2px 7px;border-radius:4px;font-size:.7em;line-height:1.2}
+.del:hover{color:#da3633;border-color:#da3633}
 .add-row{display:flex;gap:8px;margin-top:8px;align-items:center}
 .add-row input,.add-row select{background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:5px 8px;font-size:.85em}
 .add-row input:focus,.add-row select:focus{border-color:#58a6ff;outline:none}
@@ -1591,8 +1608,7 @@ h2{color:#f0f6fc;font-size:1.1em;margin:0 0 12px;border-bottom:1px solid #21262d
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .toast{position:fixed;top:20px;right:20px;background:#238636;color:#fff;padding:10px 20px;border-radius:6px;display:none;font-size:.9em;z-index:99}
 .toast.err{background:#da3633}
-.cost-block{margin-top:24px;border:1px solid #21262d;border-radius:8px;padding:16px}
-.cost-block h2{color:#f0f6fc;font-size:1.1em;margin:0 0 12px;border-bottom:1px solid #21262d;padding-bottom:6px}
+.cost-block h2{color:#f0f6fc;font-size:1.1em;margin:0;border:none;padding:0}
 .cost-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 @media(max-width:700px){.cost-grid{grid-template-columns:1fr}}
 .cost-card{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:12px}
@@ -1605,13 +1621,16 @@ h2{color:#f0f6fc;font-size:1.1em;margin:0 0 12px;border-bottom:1px solid #21262d
 .cr.sep{border-top:1px solid #30363d;margin-top:4px;padding-top:6px;font-weight:600}
 .mr{display:flex;gap:8px;padding:2px 0;font-size:.8em;color:#8b949e}
 .mr span:first-child{flex:1;color:#c9d1d9;font-family:monospace}
-.cost-footer{display:flex;justify-content:space-between;align-items:center;margin-top:12px}
 .sts{font-size:.75em;color:#8b949e}
 .rbtn{background:#21262d;color:#c9d1d9;border:1px solid #30363d;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:.8em}
 .rbtn:hover{border-color:#58a6ff;color:#f0f6fc}
 .header-row{display:flex;align-items:center;gap:12px;margin-bottom:16px}
-.btn-del{background:none;border:1px solid #30363d;color:#da3633;cursor:pointer;padding:3px 8px;border-radius:4px;font-size:.8em;margin-left:8px}
-.btn-del:hover{border-color:#da3633}
+.btn-del{background:none;border:1px solid #30363d;color:#8b949e;cursor:pointer;padding:3px 8px;border-radius:4px;font-size:.8em;margin-left:8px}
+.btn-del:hover{color:#da3633;border-color:#da3633}
+.save-status{font-size:.8em;color:#8b949e;transition:opacity .3s}
+.save-status.saving{color:#d29922}
+.save-status.saved{color:#238636}
+.save-status.error{color:#da3633}
 .footer{margin-top:40px;padding:16px 0;border-top:1px solid #21262d;text-align:center;color:#8b949e;font-size:.8em}
 .footer a{color:#58a6ff;text-decoration:none}.footer a:hover{text-decoration:underline}
 </style>
@@ -1631,8 +1650,28 @@ h2{color:#f0f6fc;font-size:1.1em;margin:0 0 12px;border-bottom:1px solid #21262d
 </div>
 <div id="toast" class="toast"></div>
 <div id="d-tip" class="d-tooltip"></div>
-<div id="cost-block" class="cost-block" style="display:none">
-<h2>Live Status</h2>
+<div id="modal" class="modal-overlay" onclick="if(event.target===this)closeModal()">
+<div class="modal-box">
+<div class="modal-header">
+<span class="modal-title" id="modal-title"></span>
+<input id="modal-search" type="text" placeholder="Search models..." style="background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:5px 10px;font-size:.85em;width:200px" oninput="filterModal()">
+<span id="modal-count" style="color:#8b949e;font-size:.8em"></span>
+<button class="btn-del" onclick="closeModal()" style="margin-left:auto">&#215;</button>
+</div>
+<div class="modal-body" id="modal-body"></div>
+<div class="modal-footer" id="modal-footer"></div>
+</div>
+</div>
+<div id="cost-block" style="display:none">
+<div class="section-title" style="display:flex;align-items:center;gap:10px">
+<span style="flex:1">Live Status</span>
+<span id="s-ts" class="sts"></span>
+<select id="refresh-interval" onchange="setStatusInterval(+this.value)" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:4px;padding:2px 6px;font-size:.75em">
+<option value="30">30s</option><option value="60" selected>1m</option><option value="300">5m</option><option value="0">off</option>
+</select>
+<button class="rbtn" onclick="loadStatus()">&#x21bb; Refresh</button>
+<a href="#" id="cf-dash-link" target="_blank" style="color:#58a6ff;font-size:.75em;text-decoration:none">CF Dashboard &#x2197;</a>
+</div>
 <div class="cost-grid">
 <div class="cost-card">
 <div class="cct">Neuron Usage Today</div>
@@ -1646,14 +1685,6 @@ h2{color:#f0f6fc;font-size:1.1em;margin:0 0 12px;border-bottom:1px solid #21262d
 <div id="c-rows"></div>
 <div style="margin-top:12px"><div class="cct">Worker</div><div id="w-info" style="font-size:.85em"></div></div>
 </div>
-</div>
-<div class="cost-footer">
-<span id="s-ts" class="sts"></span>
-<select id="refresh-interval" onchange="setStatusInterval(+this.value)" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:4px;padding:2px 6px;font-size:.75em">
-<option value="30">30s</option><option value="60" selected>1m</option><option value="300">5m</option><option value="0">off</option>
-</select>
-<button class="rbtn" onclick="loadStatus()">&#x21bb; Refresh</button>
-<a href="#" id="cf-dash-link" target="_blank" style="color:#58a6ff;font-size:.75em;text-decoration:none">CF Dashboard &#x2197;</a>
 </div>
 </div>
 <div id="app">Loading...</div>
@@ -1686,6 +1717,7 @@ async function enrichModels(){
     var r=await fetch("/api/discover",{headers:{Authorization:AUTH}});
     if(!r.ok)return;
     var d=await r.json();
+    _discoverCache=d;
     var byPath={};
     for(var i=0;i<d.models.length;i++)byPath[d.models[i].name]=d.models[i];
     var changed=false;
@@ -1711,19 +1743,20 @@ async function enrichModels(){
 }
 
 function render(){
-  let h='<div style="display:flex;align-items:center;gap:12px"><div class="section-title" style="flex:1">Models</div>';
-  h+='<button class="add-btn" onclick="discover()" style="margin-top:12px">Discover Models</button></div>';
+  let h='<div class="section-title">Models</div>';
   h+='<div class="columns">';
   h+='<div class="col">'+modelSection("Chat","chatModels")+'</div>';
   h+='<div class="col">'+modelSection("Image","imageModels")+'</div>';
   h+='<div class="col">'+modelSection("Voice","voiceModels")+'</div>';
   h+='<div class="col">'+modelSection("Utility","utilityModels")+'</div>';
   h+='</div>';
-  h+='<div id="discover-container"></div>';
-  h+=usersSection();
-  h+=aliasSection();
+  h+='<div class="section-title" style="margin-top:32px">Config</div>';
+  h+='<div class="two-col">';
+  h+='<div>'+usersSection()+'</div>';
+  h+='<div>'+aliasSection()+'</div>';
+  h+='</div>';
   h+='<div style="display:flex;gap:10px;align-items:center;margin-top:20px">';
-  h+='<button class="btn" style="margin:0" onclick="save()">Save</button>';
+  h+='<span id="save-status" class="save-status"></span>';
   h+='<button class="add-btn" onclick="exportCfg()">Export JSON</button>';
   h+='</div>';
   if(!kvMode)h+='<div style="color:#d29922;font-size:.8em;margin-top:8px">&#9888; No KV namespace bound — changes live in memory only and are lost on cold start. Export JSON and apply via <code style="color:#d29922">wrangler kv:key put --namespace-id=&lt;id&gt; gateway-config config.json</code>.</div>';
@@ -1741,6 +1774,7 @@ function priceBadge(p){
 }
 function modelSection(title,key){
   let h="<h2>"+title+"</h2>";
+  h+='<div class="col-scroll">';
   cfg[key].forEach((m,i)=>{
     h+='<div class="card">';
     h+='<div class="arrows">';
@@ -1762,21 +1796,16 @@ function modelSection(title,key){
     h+='</div>';
     h+='</div>';
     h+="<button class=\\"d-info-btn\\" onmouseenter=\\"showModelInfo('"+key+"',"+i+",event)\\" onmouseleave=\\"hideInfo()\\">i</button>";
-    h+='<label class="toggle"><input type="checkbox" '+(m.enabled?"checked":"")+" onchange=\\"toggleM('"+key+"',"+i+",this.checked)\\"><span class=\\"slider\\"></span></label>";
     h+="<button class=\\"del\\" onclick=\\"delModel('"+key+"',"+i+")\\">&#215;</button>";
     h+='</div>';
   });
-  h+='<div class="add-row" style="flex-wrap:wrap">';
-  h+='<input id="add_path_'+key+'" placeholder="@cf/vendor/model" style="min-width:160px;flex:2">';
-  if(key==="utilityModels")h+='<select id="add_kind_'+key+'" style="min-width:70px"><option value="embedding">embedding</option><option value="translation">translation</option><option value="moderation">moderation</option></select>';
-  if(key==="voiceModels")h+='<select id="add_kind_'+key+'" style="min-width:50px"><option value="stt">STT</option><option value="tts">TTS</option></select>';
-  h+="<button class=\\"add-btn\\" onclick=\\"addModel('"+key+"')\\">+ Add</button>";
   h+='</div>';
+  h+="<button class=\\"add-btn\\" onclick=\\"openDiscover('"+key+"')\\" style=\\"width:100%;margin-top:auto;flex-shrink:0\\">+ Add</button>";
   return h;
 }
 
 function aliasSection(){
-  let h='<div style="margin-top:20px;border-top:1px solid #21262d;padding-top:16px">';
+  let h='<div>';
   h+='<h2>Aliases (spoofed names)</h2>';
   h+='<p style="color:#8b949e;font-size:.8em;margin-bottom:10px">Aliases always work for all keys. Clients send alias names (e.g. <code>gpt-4o</code>), gateway resolves them to real models.</p>';
   const allModels=[...cfg.chatModels.map(m=>({id:m.id,t:"chat"})),...cfg.imageModels.map(m=>({id:m.id,t:"image"})),(cfg.voiceModels||[]).map(m=>({id:m.id,t:"voice"}))].flat();
@@ -1811,31 +1840,105 @@ function filterTargets(){
   var pool=t==="chat"?cfg.chatModels:t==="image"?cfg.imageModels:(cfg.voiceModels||[]);
   pool.forEach(function(m){sel.innerHTML+='<option value="'+esc(m.id)+'">'+esc(m.id)+'</option>'});
 }
-function toggleM(key,idx,val){cfg[key][idx].enabled=val}
 function move(key,idx,dir){
   const arr=cfg[key],to=idx+dir;
   if(to<0||to>=arr.length)return;
   [arr[idx],arr[to]]=[arr[to],arr[idx]];
-  render();
+  render();autoSave();
 }
-function delModel(key,idx){cfg[key].splice(idx,1);render()}
-function addModel(key){
-  const path=document.getElementById("add_path_"+key).value.trim();
-  if(!path){toast("Enter model path",true);return}
-  const id=path.split("/").pop();
-  if(!id){toast("Invalid path",true);return}
-  if(cfg[key].some(m=>m.id===id||m.path===path)){toast("Model already added",true);return}
-  const entry={id,path,enabled:true,label:id};
-  if(key==="chatModels"){entry.vision=false;entry.contextWindow=32768}
-  if(key==="imageModels"){entry.maxDim=1024;entry.multipart=false}
-  var kindEl=document.getElementById("add_kind_"+key);
-  if(kindEl)entry.kind=kindEl.value;
-  cfg[key].push(entry);
-  document.getElementById("add_path_"+key).value="";
-  render();
+function delModel(key,idx){cfg[key].splice(idx,1);render();autoSave()}
+var _discoverCache=null;
+var _modalCat=null;
+var _modalSearch="";
+var catLabels={chatModels:"Chat",imageModels:"Image",voiceModels:"Voice",utilityModels:"Utility"};
+async function openDiscover(cat){
+  _modalCat=cat;_modalSearch="";
+  var modal=document.getElementById("modal");
+  document.getElementById("modal-title").textContent="Add "+catLabels[cat]+" Model";
+  document.getElementById("modal-search").value="";
+  modal.classList.add("open");
+  if(_discoverCache){renderModal();return}
+  document.getElementById("modal-body").innerHTML='<p style="color:#8b949e;padding:20px 0">Loading models from Cloudflare...</p>';
+  document.getElementById("modal-footer").innerHTML="";
+  document.getElementById("modal-count").textContent="";
+  var r=await fetch("/api/discover",{headers:{Authorization:AUTH}});
+  if(!r.ok){document.getElementById("modal-body").innerHTML='<p style="color:#da3633">Discovery failed</p>';return}
+  _discoverCache=await r.json();
+  renderModal();
 }
-function setAlias(idx,val){cfg.aliases[idx].target=val}
-function delAlias(idx){cfg.aliases.splice(idx,1);render()}
+function closeModal(){document.getElementById("modal").classList.remove("open");hideInfo()}
+function filterModal(){_modalSearch=(document.getElementById("modal-search").value||"").toLowerCase();renderModal()}
+function getModalItems(){
+  if(!_discoverCache||!_modalCat)return[];
+  var items=_discoverCache.models.filter(function(m){return m.category===_modalCat});
+  if(_modalSearch)items=items.filter(function(m){return m.id.toLowerCase().indexOf(_modalSearch)>=0||m.name.toLowerCase().indexOf(_modalSearch)>=0||(m.description||"").toLowerCase().indexOf(_modalSearch)>=0});
+  return items;
+}
+function renderModal(){
+  var items=getModalItems();
+  var existingPaths=new Set();
+  for(var list of [cfg.chatModels,cfg.imageModels,cfg.voiceModels,cfg.utilityModels])
+    for(var m of list||[])existingPaths.add(m.path);
+  var addedCount=0,h="";
+  for(var i=0;i<items.length;i++){
+    var m=items[i];
+    var added=existingPaths.has(m.name);
+    if(added)addedCount++;
+    h+='<div class="card">';
+    h+='<div class="info">';
+    h+='<div class="name">'+esc(m.id)+'</div>';
+    h+='<div class="path">'+esc(m.name)+'</div>';
+    h+='<div class="meta">';
+    if(m.beta)h+='<span class="d-badge beta">BETA</span>';
+    if(m.vision)h+='<span class="d-badge vision">vision</span>';
+    if(m.functionCalling)h+='<span class="d-badge fn">fn_call</span>';
+    if(m.reasoning)h+='<span class="d-badge reason">reasoning</span>';
+    if(m.contextWindow)h+='<span class="d-badge ctx">ctx:'+Math.round(m.contextWindow/1024)+'k</span>';
+    if(m.inpainting)h+='<span class="d-badge inpaint">inpainting</span>';
+    h+=priceBadge(m.pricing);
+    if(m.kind)h+='<span class="d-badge kind">'+m.kind+'</span>';
+    if(m.deprecated)h+='<span class="d-badge dep">EOL</span>';
+    h+='</div></div>';
+    h+="<button class=\\"d-info-btn\\" onmouseenter=\\"showDiscoverInfo("+i+",event)\\" onmouseleave=\\"hideInfo()\\">i</button>";
+    h+='<label class="toggle"><input type="checkbox" '+(added?"checked":"")+" onchange=\\"toggleDiscover("+i+",this.checked)\\"><span class=\\"slider\\"></span></label>";
+    h+='</div>';
+  }
+  if(!items.length)h='<p style="color:#8b949e;padding:20px 0;text-align:center">No models found'+(_modalSearch?' for "'+esc(_modalSearch)+'"':'')+'</p>';
+  document.getElementById("modal-body").innerHTML=h;
+  document.getElementById("modal-count").textContent=items.length+" models · "+addedCount+" added";
+  var dc=_discoverCache;
+  document.getElementById("modal-footer").innerHTML='Source: <a href="'+(dc.dashboard||"#")+'" target="_blank">Workers AI Dashboard</a> · <a href="https://developers.cloudflare.com/workers-ai/platform/pricing/" target="_blank">Full pricing table</a>';
+}
+function showDiscoverInfo(idx,ev){
+  var m=getModalItems()[idx];if(!m)return;
+  var tip=document.getElementById("d-tip");if(!tip)return;
+  tip.innerHTML='<div class="dt-title">'+esc(m.id)+'</div><div class="dt-path">'+esc(m.name)+'</div>'+(m.description?esc(m.description):'<em style="color:#8b949e">No description</em>');
+  positionTip(tip,ev);
+}
+function toggleDiscover(idx,on){
+  var m=getModalItems()[idx];if(!m)return;
+  var cat=_modalCat;
+  if(on){
+    if(cfg[cat].some(function(x){return x.path===m.name}))return;
+    var entry={id:m.id,path:m.name,label:m.id,description:m.description||""};
+    if(m.beta)entry.beta=true;
+    if(m.deprecated)entry.deprecated=m.deprecated;
+    if(m.functionCalling)entry.functionCalling=true;
+    if(m.reasoning)entry.reasoning=true;
+    if(m.pricing)entry.pricing=m.pricing;
+    if(cat==="chatModels"){entry.vision=!!m.vision;entry.contextWindow=m.contextWindow||32768}
+    if(cat==="imageModels"){entry.maxDim=1024;entry.multipart=false;entry.inpainting=!!m.inpainting}
+    if(cat==="voiceModels")entry.kind=m.kind||"stt";
+    if(cat==="utilityModels")entry.kind=m.kind||"other";
+    cfg[cat].push(entry);
+  }else{
+    cfg[cat]=cfg[cat].filter(function(x){return x.path!==m.name});
+  }
+  render();
+  autoSave();
+}
+function setAlias(idx,val){cfg.aliases[idx].target=val;autoSave()}
+function delAlias(idx){cfg.aliases.splice(idx,1);render();autoSave()}
 function addAlias(){
   const name=document.getElementById("newAlias").value.trim();
   const type=document.getElementById("newType").value;
@@ -1843,12 +1946,19 @@ function addAlias(){
   if(!name){toast("Enter alias name",true);return}
   if(cfg.aliases.some(a=>a.name===name)){toast("Alias exists",true);return}
   cfg.aliases.push({name,target,type});
-  render();
+  render();autoSave();
 }
 
-async function save(){
-  const btn=document.querySelector(".btn");
-  btn.disabled=true;btn.textContent="Saving...";
+var _saveTimer=null;
+function autoSave(){
+  var el=document.getElementById("save-status");
+  if(el){el.textContent="Unsaved changes...";el.className="save-status saving"}
+  if(_saveTimer)clearTimeout(_saveTimer);
+  _saveTimer=setTimeout(doSave,600);
+}
+async function doSave(){
+  var el=document.getElementById("save-status");
+  if(el){el.textContent="Saving...";el.className="save-status saving"}
   try{
     const r=await fetch("/api/config",{
       method:"POST",
@@ -1856,10 +1966,16 @@ async function save(){
       body:JSON.stringify(cfg)
     });
     const d=await r.json();
-    if(d.ok)toast("Saved"+(d.storage==="memory"?" (memory only)":"")+"!",false);
-    else toast("Error: "+(d.error||"unknown"),true);
-  }catch(e){toast("Network error",true)}
-  btn.disabled=false;btn.textContent="Save";
+    if(d.ok){
+      if(el){el.textContent="\\u2713 Saved"+(d.storage==="memory"?" (memory)":"");el.className="save-status saved"}
+      setTimeout(function(){if(el)el.textContent=""},3000);
+    }else{
+      if(el){el.textContent="\\u2717 Save failed";el.className="save-status error"}
+      toast("Error: "+(d.error||"unknown"),true);
+    }
+  }catch(e){
+    if(el){el.textContent="\\u2717 Network error";el.className="save-status error"}
+  }
 }
 
 function toast(msg,err){
@@ -1906,25 +2022,28 @@ async function loadStatus(){
   }catch(e){}}
 
 var usersData=null;
+function userCard(u,rl){
+  var hjid=esc(escJs(u.id));
+  var h='<div class="card" style="flex-wrap:wrap;gap:6px">';
+  h+='<div class="info" style="flex:1;min-width:0">';
+  h+='<input class="inline-name" value="'+esc(u.name)+'" data-uid="'+esc(u.id)+'" onblur="renameKey(this)" onkeydown="if(event.key===&#39;Enter&#39;)this.blur()" style="background:transparent;border:none;border-bottom:1px solid transparent;color:#f0f6fc;font-weight:600;font-size:.95em;padding:0 0 1px;width:100%;outline:none" onfocus="this.style.borderBottomColor=&#39;#58a6ff&#39;" />';
+  h+='<div class="path">'+esc(u.source)+' · '+u.rpm+' RPM';
+  if(rl)h+=' · '+rl.used+'/'+u.rpm+' used';
+  if(u.keyPreview)h+=' · key: '+esc(u.keyPreview);
+  if(u.created)h+=' · '+esc(u.created);
+  h+='</div></div>';
+  h+='<span class="spoof-lbl" title="ON: /v1/models returns ONLY alias names (gpt-4o, dall-e-3, etc.) — real backend models are hidden. Use this for clients that expect OpenAI-compatible model names.&#10;OFF: /v1/models returns real Cloudflare model IDs.&#10;Aliases always resolve in both modes.">Spoof aliases</span>';
+  h+='<label class="toggle"><input type="checkbox" '+(u.spoofed?"checked":"");
+  h+=" onchange=\\"toggleSpoof("+hjid+")\\"><span class=\\"slider\\"></span></label>";
+  if(u.source==="kv")h+="<button class=\\"del\\" onclick=\\"deleteUser("+hjid+")\\">\\u00d7</button>";
+  h+='</div>';
+  return h;
+}
 function usersSection(){
   if(!usersData)return'<div style="color:#8b949e;margin:16px 0">Users unavailable</div>';
-  var d=usersData,h='<h2 style="margin-top:24px">API Keys</h2>';
-  h+='<div style="color:#8b949e;font-size:.8em;margin-bottom:10px">Aliases always resolve for all keys regardless of this toggle.</div>';
-  for(var i=0;i<d.env_users.length;i++){var u=d.env_users[i];var rl=d.rate_limits[u.id];var eid=esc(u.id);var jid=escJs(u.id);
-    h+='<div class="card"><div class="info"><div class="name">'+eid+'</div><div class="path">source: env · '+u.rpm+' RPM';
-    if(rl)h+=' · '+rl.used+'/'+u.rpm+' used';
-    h+='</div></div><span style="color:#8b949e;font-size:.75em;margin-right:4px">Show in /v1/models<i class="info-i" title="ON: alias names included in /v1/models list for this key. OFF: only real model names listed. Aliases always work either way.">i</i></span>';
-    h+='<label class="toggle"><input type="checkbox" '+(u.spoofed?"checked":"");
-    h+=" onchange=\\"toggleSpoof("+jid+")\\"><span class=\\"slider\\"></span></label>";
-    h+='<span class="type-badge">env</span></div>';}
-  for(var i=0;i<d.kv_users.length;i++){var u=d.kv_users[i];var eid=esc(u.id);var jid=escJs(u.id);
-    h+='<div class="card"><div class="info"><div class="name">'+eid+'</div>';
-    h+='<div class="path">key: '+esc(u.keyPreview)+' · '+u.rpm+' RPM · '+esc(u.created)+'</div></div>';
-    h+='<span style="color:#8b949e;font-size:.75em;margin-right:4px">Show in /v1/models<i class="info-i" title="ON: alias names included in /v1/models list for this key. OFF: only real model names listed. Aliases always work either way.">i</i></span>';
-    h+='<label class="toggle"><input type="checkbox" '+(u.spoofed?"checked":"");
-    h+=" onchange=\\"toggleSpoof("+jid+")\\"><span class=\\"slider\\"></span></label>";
-    h+='<span class="type-badge">kv</span>';
-    h+="<button class=\\"btn-del\\" onclick=\\"deleteUser("+jid+")\\">\\u00d7</button></div>";}
+  var d=usersData,h='<h2>API Keys</h2>';
+  for(var i=0;i<d.env_users.length;i++){h+=userCard(d.env_users[i],d.rate_limits[d.env_users[i].id]);}
+  for(var i=0;i<d.kv_users.length;i++){h+=userCard(d.kv_users[i],d.rate_limits[d.kv_users[i].id]);}
   h+='<div class="add-row" style="margin-top:12px"><input id="new-uid" placeholder="user name">';
   h+='<input id="new-rpm" type="number" value="30" style="width:80px" placeholder="RPM">';
   h+='<button class="add-btn" onclick="createUser()">+ Generate Key</button></div>';
@@ -1943,7 +2062,12 @@ function apiRefSection(){
   h+='<div style="color:#8b949e;font-weight:600">Model selection</div>';
   h+='<div>Short name: <code style="color:#58a6ff">"qwen3-30b-a3b-fp8"</code></div>';
   h+='<div>Full CF path: <code style="color:#58a6ff">"@cf/qwen/qwen3-30b-a3b-fp8"</code></div>';
-  h+='<div>Alias: <code style="color:#58a6ff">"gpt-4o"</code> <span style="color:#8b949e">(always resolves, regardless of Show in /v1/models toggle)</span></div></div>';
+  h+='<div>Alias: <code style="color:#58a6ff">"gpt-4o"</code> <span style="color:#8b949e">(always resolves for all keys)</span></div></div>';
+  h+='<div class="card" style="flex-direction:column;align-items:stretch;gap:6px">';
+  h+='<div style="color:#8b949e;font-weight:600">Spoof aliases</div>';
+  h+='<div><b style="color:#238636">ON</b> — <code>GET /v1/models</code> returns <b>only</b> alias names (<code>gpt-4o</code>, <code>dall-e-3</code>, …). Real backend models are hidden. Use for clients that expect OpenAI model names.</div>';
+  h+='<div><b style="color:#8b949e">OFF</b> — <code>GET /v1/models</code> returns real Cloudflare model IDs. Default.</div>';
+  h+='<div style="color:#8b949e">Toggle per key in API Keys above. Aliases resolve in requests regardless of this setting.</div></div>';
   h+='<div class="card" style="flex-direction:column;align-items:stretch;gap:3px">';
   h+='<div style="color:#8b949e;font-weight:600;margin-bottom:4px">Endpoints</div>';
   var eps=[["POST /v1/chat/completions","Chat completions (streaming supported)"],["POST /v1/images/generations","Image generation"],["POST /v1/images/edits","Inpainting (multipart)"],["POST /v1/embeddings","Text embeddings"],["POST /v1/audio/transcriptions","Speech-to-text (multipart)"],["POST /v1/audio/translations","Audio translation (multipart)"],["POST /v1/audio/speech","Text-to-speech"],["POST /v1/translations","Text translation"],["POST /v1/moderations","Content moderation"],["GET /v1/models","List available models"],["GET /status","ASCII status dashboard"],["GET /config?key=&lt;key&gt;","Config panel (this page)"],["GET /api/discover","Browse Cloudflare model catalog"],["GET /api/status","Live status + costs (JSON)"],["GET /api/config","Current config (JSON)"],["GET /api/users","API key info (JSON)"]];
@@ -1974,8 +2098,23 @@ async function deleteUser(id){
 async function toggleSpoof(id){
   var r=await fetch("/api/users",{method:"POST",headers:{Authorization:AUTH,"Content-Type":"application/json"},body:JSON.stringify({action:"toggle_spoof",id:id})});
   var d=await r.json();
-  if(d.ok){toast(d.spoofed?"List aliases ON for "+id:"List aliases OFF for "+id,false);var r2=await fetch("/api/users",{headers:{Authorization:AUTH}});if(r2.ok)usersData=await r2.json();render();}
-  else toast(d.error||"Failed",true);
+  if(d.ok){
+    if(!cfg.spoofedKeys)cfg.spoofedKeys=[];
+    if(d.spoofed){if(cfg.spoofedKeys.indexOf(id)<0)cfg.spoofedKeys.push(id)}
+    else{cfg.spoofedKeys=cfg.spoofedKeys.filter(function(k){return k!==id})}
+    toast(d.spoofed?"Spoof aliases ON for "+id:"Spoof aliases OFF for "+id,false);
+    var r2=await fetch("/api/users",{headers:{Authorization:AUTH}});if(r2.ok)usersData=await r2.json();render();
+  }else toast(d.error||"Failed",true);
+}
+async function renameKey(el){
+  var uid=el.dataset.uid;var name=el.value.trim();
+  if(!name){el.value=uid;name=uid;}
+  var prev=usersData?[].concat(usersData.env_users,usersData.kv_users).find(function(u){return u.id===uid}):null;
+  if(prev&&prev.name===name)return;
+  var r=await fetch("/api/users",{method:"POST",headers:{Authorization:AUTH,"Content-Type":"application/json"},body:JSON.stringify({action:"rename_key",id:uid,name:name})});
+  var d=await r.json();
+  if(d.ok){toast("Renamed",false);var r2=await fetch("/api/users",{headers:{Authorization:AUTH}});if(r2.ok)usersData=await r2.json();}
+  else{toast(d.error||"Failed",true);if(prev)el.value=prev.name;}
 }
 function copyKey(){navigator.clipboard.writeText(document.getElementById("new-key").textContent);toast("Copied!",false)}
 function exportCfg(){
@@ -1984,68 +2123,6 @@ function exportCfg(){
   a.download="cng-config.json";a.click();URL.revokeObjectURL(a.href);
 }
 
-var discoverData=null;
-async function discover(){
-  var el=document.getElementById("discover-container");
-  if(!el)return;
-  el.innerHTML='<div class="discover-panel"><p style="color:#8b949e">Discovering models from Cloudflare API...</p></div>';
-  var r=await fetch("/api/discover",{headers:{Authorization:AUTH}});
-  if(!r.ok){el.innerHTML='<div class="discover-panel"><p style="color:#da3633">Discovery failed</p></div>';return}
-  discoverData=await r.json();
-  renderDiscover();
-}
-function renderDiscover(){
-  if(!discoverData)return;
-  var el=document.getElementById("discover-container");
-  var d=discoverData;
-  var h='<div class="discover-panel">';
-  h+='<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">';
-  h+='<span style="color:#f0f6fc;font-weight:600">Available on Cloudflare Workers AI</span>';
-  h+='<span style="color:#8b949e;font-size:.8em">'+d.discovered+' models · '+d.new+' new</span>';
-  h+='<button class="add-btn" onclick="discover()" style="margin-left:auto">Refresh</button>';
-  h+='<button class="btn-del" onclick="closeDiscover()">Close</button>';
-  h+='</div>';
-  var cats={chatModels:"Chat",imageModels:"Image",voiceModels:"Voice",utilityModels:"Utility"};
-  var nameIdx={};
-  for(var k=0;k<d.models.length;k++)nameIdx[d.models[k].name]=k;
-  for(var cat in cats){
-    var items=d.models.filter(function(m){return m.category===cat});
-    if(!items.length)continue;
-    h+='<h3>'+cats[cat]+' ('+items.length+')</h3><div class="d-grid">';
-    for(var i=0;i<items.length;i++){
-      var m=items[i];
-      var gi=nameIdx[m.name];
-      h+='<div class="d-card">';
-      h+='<div class="d-name">'+esc(m.id)+'</div>';
-      h+='<div class="d-badges">';
-      if(m.beta)h+='<span class="d-badge beta">BETA</span>';
-      if(m.vision)h+='<span class="d-badge vision">vision</span>';
-      if(m.functionCalling)h+='<span class="d-badge fn">fn_call</span>';
-      if(m.reasoning)h+='<span class="d-badge reason">reasoning</span>';
-      if(m.contextWindow)h+='<span class="d-badge ctx">'+Math.round(m.contextWindow/1024)+'k</span>';
-      h+=priceBadge(m.pricing);
-      if(m.kind)h+='<span class="d-badge kind">'+m.kind+'</span>';
-      if(m.deprecated)h+='<span class="d-badge dep">EOL</span>';
-      h+='</div>';
-      h+='<div class="d-act">';
-      h+="<button class=\\"d-info-btn\\" onmouseenter=\\"showInfo("+gi+",event)\\" onmouseleave=\\"hideInfo()\\">i</button>";
-      if(m.existing)h+='<span class="d-badge existing">added</span>';
-      else h+="<button class=\\"d-add\\" onclick=\\"addDiscovered("+i+",'"+cat+"')\\">+ Add</button>";
-      h+='</div></div>';
-    }
-    h+='</div>';
-  }
-  h+='<div style="margin-top:12px;font-size:.85em;color:#8b949e">Source: <a href="'+d.dashboard+'" target="_blank" style="color:#58a6ff">Workers AI Dashboard</a> · <a href="https://developers.cloudflare.com/workers-ai/platform/pricing/" target="_blank" style="color:#58a6ff">Full pricing table</a></div>';
-  h+='</div>';
-  el.innerHTML=h;
-}
-function closeDiscover(){var el=document.getElementById("discover-container");if(el)el.innerHTML="";hideInfo();}
-function showInfo(gi,ev){
-  var m=discoverData.models[gi];if(!m)return;
-  var tip=document.getElementById("d-tip");if(!tip)return;
-  tip.innerHTML='<div class="dt-title">'+esc(m.id)+'</div><div class="dt-path">'+esc(m.name)+'</div>'+(m.description?esc(m.description):'<em style="color:#8b949e">No description</em>');
-  positionTip(tip,ev);
-}
 function showModelInfo(key,idx,ev){
   var m=cfg[key][idx];if(!m)return;
   var tip=document.getElementById("d-tip");if(!tip)return;
@@ -2068,27 +2145,6 @@ function positionTip(tip,ev){
   tip.style.display="block";
 }
 function hideInfo(){var tip=document.getElementById("d-tip");if(tip)tip.style.display="none";}
-function addDiscovered(idx,cat){
-  var m=discoverData.models.filter(function(x){return x.category===cat})[idx];
-  if(!m||m.existing)return;
-  if(cfg[cat].some(function(x){return x.path===m.name})){toast("Already added",true);return}
-  var entry={id:m.id,path:m.name,enabled:true,label:m.id,description:m.description||""};
-  if(m.beta)entry.beta=true;
-  if(m.deprecated)entry.deprecated=m.deprecated;
-  if(m.functionCalling)entry.functionCalling=true;
-  if(m.reasoning)entry.reasoning=true;
-  if(m.pricing)entry.pricing=m.pricing;
-  if(cat==="chatModels"){entry.vision=!!m.vision;entry.contextWindow=m.contextWindow||32768}
-  if(cat==="imageModels"){entry.maxDim=1024;entry.multipart=false;entry.inpainting=!!m.inpainting}
-  if(cat==="voiceModels")entry.kind=m.kind||"stt";
-  if(cat==="utilityModels")entry.kind=m.kind||"other";
-  cfg[cat].push(entry);
-  m.existing=true;
-  discoverData.new--;
-  renderDiscover();
-  render();
-  toast("Added "+m.id,false);
-}
 
 var statusInterval=null;
 function setStatusInterval(sec){
