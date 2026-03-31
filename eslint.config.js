@@ -1,0 +1,58 @@
+export default [
+  {
+    files: ["src/**/*.js"],
+    languageOptions: {
+      ecmaVersion: 2024,
+      sourceType: "module",
+      globals: {
+        console: "readonly",
+        crypto: "readonly",
+        caches: "readonly",
+        fetch: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly",
+        Request: "readonly",
+        Response: "readonly",
+        Headers: "readonly",
+        FormData: "readonly",
+        ReadableStream: "readonly",
+        TransformStream: "readonly",
+        TextEncoder: "readonly",
+        TextDecoder: "readonly",
+        Uint8Array: "readonly",
+        ArrayBuffer: "readonly",
+        atob: "readonly",
+        btoa: "readonly",
+        setTimeout: "readonly",
+        globalThis: "readonly",
+      },
+    },
+    rules: {
+      "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" }],
+      "no-undef": "error",
+      "no-constant-condition": "warn",
+      "no-debugger": "error",
+      "no-duplicate-case": "error",
+      "no-empty": ["warn", { allowEmptyCatch: true }],
+      "no-redeclare": "error",
+      "no-shadow-restricted-names": "error",
+      "eqeqeq": ["warn", "smart"],
+      "no-eval": "error",
+      "no-implied-eval": "error",
+      "no-new-func": "error",
+    },
+  },
+  {
+    files: ["test/**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: 2024,
+      sourceType: "module",
+      globals: {
+        console: "readonly",
+      },
+    },
+    rules: {
+      "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+    },
+  },
+];

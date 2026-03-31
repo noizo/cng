@@ -1,0 +1,33 @@
+{
+  "name": "cng",
+  "version": "1.0.0",
+  "description": "OpenAI-compatible API gateway on Cloudflare Workers AI",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test ./test/*.mjs",
+    "lint": "eslint src/",
+    "bundle": "node scripts/bundle.mjs",
+    "deploy": "wrangler deploy",
+    "deploy:dry": "wrangler deploy --dry-run"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/noizo/cng.git"
+  },
+  "directories": {
+    "doc": "docs",
+    "example": "examples",
+    "test": "test"
+  },
+  "keywords": [],
+  "author": "",
+  "bugs": {
+    "url": "https://github.com/noizo/cng/issues"
+  },
+  "homepage": "https://github.com/noizo/cng#readme",
+  "devDependencies": {
+    "eslint": "^10.1.0"
+  }
+}

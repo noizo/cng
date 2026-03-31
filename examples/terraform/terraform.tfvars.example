@@ -1,0 +1,18 @@
+cloudflare_account_id = "your-account-id"
+cloudflare_api_token  = "your-api-token"
+api_key               = "your-admin-key"
+
+worker_name = "cng"
+
+# Persistent config + dynamic users (requires paid plan)
+# enable_kv = true
+
+# Custom domain (requires zone_id)
+# custom_domain      = "llm.example.com"
+# cloudflare_zone_id = "your-zone-id"
+
+# GitHub SSO for config panel
+# enable_sso                 = true
+# github_oauth_client_id     = "your-github-client-id"
+# github_oauth_client_secret = "your-github-client-secret"
+# sso_allowed_emails         = ["you@example.com"]

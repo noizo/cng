@@ -1,0 +1,10 @@
+node_modules/
+dist/
+test-imports.mjs
+.wrangler/
+.dev.vars
+*.tfvars
+*.tfstate
+*.tfstate.backup
+.terraform/
+.claude/worktrees/

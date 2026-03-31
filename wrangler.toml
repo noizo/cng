@@ -1,0 +1,37 @@
+name = "cng"
+main = "src/index.js"
+compatibility_date = "2024-12-01"
+
+[[rules]]
+globs = ["**/*.html"]
+type = "Text"
+fallthrough = true
+
+# --- Workers AI binding (enables env.AI for direct inference) ---
+[ai]
+binding = "AI"
+
+# --- Required secrets (set via `wrangler secret put`) ---
+# CF_ACCOUNT_ID  - your Cloudflare account ID
+# CF_API_TOKEN   - API token with Workers AI + Analytics permissions
+# API_KEY        - admin gateway key (generate: openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')
+
+# --- Optional secrets ---
+# API_KEY_2      - secondary API key (client role, restricted from admin routes)
+
+# --- Optional: KV namespace for persistent config ---
+# Requires Workers paid plan ($5/mo). Without KV, config
+# lives in memory and resets on cold start.
+#
+# Create with: wrangler kv namespace create cng-config
+# Then uncomment and fill in the ID:
+#
+# [[kv_namespaces]]
+# binding = "CONFIG"
+# id = "<namespace-id>"
+
+# --- Optional: custom domain ---
+# [routes]
+# routes = [
+#   { pattern = "llm.example.com", custom_domain = true }
+# ]

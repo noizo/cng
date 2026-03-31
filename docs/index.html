@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CNG · Cloudflare Neuron Gate</title>
+<meta name="description" content="OpenAI-compatible API gateway on Cloudflare Workers AI. Zero dependencies, free tier friendly.">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d1117;color:#c9d1d9;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+.hero{text-align:center;padding:40px 20px 24px}
+.hero h1{font-size:2em;color:#f0f6fc;margin-bottom:8px}
+.hero h1 span{background:linear-gradient(90deg,#58a6ff,#a371f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{color:#8b949e;font-size:1.05em;max-width:600px;margin:0 auto 20px}
+.buttons{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:8px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;font-size:.9em;transition:opacity .2s}
+.btn-primary{background:#238636;color:#fff}
+.btn-secondary{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
+.btn:hover{opacity:.85}
+.demo-wrap{max-width:1200px;margin:0 auto;padding:0 20px 40px}
+.demo-label{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.demo-label span{color:#8b949e;font-size:.85em}
+.demo-label code{background:#161b22;color:#58a6ff;padding:2px 8px;border-radius:4px;font-size:.85em}
+.frame-wrap{border:1px solid #30363d;border-radius:12px;overflow:hidden;background:#161b22}
+iframe{width:100%;height:75vh;min-height:500px;border:none;display:block}
+.footer{text-align:center;padding:24px;color:#484f58;font-size:.8em;border-top:1px solid #21262d}
+.footer a{color:#58a6ff;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="hero">
+<h1><span>CNG</span> · Cloudflare Neuron Gate</h1>
+<p>OpenAI-compatible API gateway on Cloudflare Workers AI. Zero dependencies. Free tier friendly.</p>
+<div class="buttons">
+<a href="https://github.com/noizo/cng" class="btn btn-secondary">GitHub</a>
+<a href="https://github.com/noizo/cng#quick-start" class="btn btn-primary">Get Started</a>
+</div>
+</div>
+<div class="demo-wrap">
+<div class="demo-label">
+<span>Live demo</span>
+<code>password: cng-public-demo</code>
+</div>
+<div class="frame-wrap">
+<iframe src="https://cng-demo.traefik.workers.dev/config" loading="lazy" allow="clipboard-write"></iframe>
+</div>
+</div>
+<div class="footer">
+<a href="https://github.com/noizo/cng">noizo/cng</a> · Apache-2.0
+</div>
+</body>
+</html>

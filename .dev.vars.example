@@ -1,0 +1,8 @@
+# Local development variables for `wrangler dev`
+# Copy to .dev.vars and fill in your values
+
+CF_ACCOUNT_ID=your-account-id
+CF_API_TOKEN=your-api-token
+API_KEY=dev-admin-key
+# API_KEY_2=dev-client-key
+# GATEWAY_CONFIG={"chatModels":[],"imageModels":[],"voiceModels":[],"utilityModels":[],"aliases":[]}
