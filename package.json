@@ -28,6 +28,6 @@
   },
   "homepage": "https://github.com/noizo/cng#readme",
   "devDependencies": {
-    "eslint": "^10.1.0"
+    "eslint": "^10.2.0"
   }
 }
