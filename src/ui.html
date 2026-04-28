@@ -139,7 +139,7 @@ h2{color:#f0f6fc;font-size:1.1em;margin:0 0 12px;border-bottom:1px solid #21262d
 .btn{background:#238636;color:#fff;border:none;padding:10px 24px;border-radius:6px;cursor:pointer;font-size:.95em;margin-top:20px}
 .btn:hover{background:#2ea043}
 .btn:disabled{opacity:.5;cursor:not-allowed}
-.toast{position:fixed;top:20px;right:20px;background:#238636;color:#fff;padding:10px 20px;border-radius:6px;display:none;font-size:.9em;z-index:99}
+.toast{position:fixed;top:20px;right:20px;background:#238636;color:#fff;padding:10px 20px;border-radius:6px;display:none;font-size:.9em;z-index:99;max-width:calc(100vw - 40px)}
 .toast.err{background:#da3633}
 .cost-block h2{color:#f0f6fc;font-size:1.1em;margin:0;border:none;padding:0}
 .cost-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
@@ -206,7 +206,7 @@ h2{color:#f0f6fc;font-size:1.1em;margin:0 0 12px;border-bottom:1px solid #21262d
 <div class="modal-box">
 <div class="modal-header">
 <span class="modal-title" id="modal-title"></span>
-<input id="modal-search" type="text" placeholder="Search models..." style="background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:5px 10px;font-size:.85em;width:200px" oninput="filterModal()">
+<input id="modal-search" type="text" placeholder="Search models..." style="background:#161b22;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:5px 10px;font-size:.85em;flex:1;min-width:60px;max-width:200px" oninput="filterModal()">
 <span id="modal-count" style="color:#8b949e;font-size:.8em"></span>
 <button class="btn-del" onclick="closeModal()" style="margin-left:auto">&#215;</button>
 </div>
@@ -801,7 +801,7 @@ function apiRefSection(){
   h+='<div class="card" style="flex-direction:column;align-items:stretch;gap:3px">';
   h+='<div style="color:#8b949e;font-weight:600;margin-bottom:4px">Endpoints</div>';
   var eps=[["POST /v1/chat/completions","Chat completions (streaming supported)"],["POST /v1/images/generations","Image generation"],["POST /v1/images/edits","Inpainting (multipart)"],["POST /v1/embeddings","Text embeddings"],["POST /v1/audio/transcriptions","Speech-to-text (multipart)"],["POST /v1/audio/translations","Audio translation (multipart)"],["POST /v1/audio/speech","Text-to-speech"],["POST /v1/translations","Text translation"],["POST /v1/moderations","Content moderation"],["GET /v1/models","List available models"],["GET /config","Config panel (key stored in session)"],["GET /api/discover","Browse Cloudflare model catalog"],["GET /api/status","Live status + costs (JSON)"],["GET /api/config","Current config (JSON)"],["GET /api/users","API key info (JSON)"]];
-  for(var j=0;j<eps.length;j++){h+='<div style="display:flex;gap:12px"><code style="color:#58a6ff;min-width:280px;font-size:.85em">'+eps[j][0]+'</code><span style="color:#8b949e">'+eps[j][1]+'</span></div>';}
+  for(var j=0;j<eps.length;j++){h+='<div style="display:flex;gap:12px;flex-wrap:wrap"><code style="color:#58a6ff;white-space:nowrap;font-size:.85em">'+eps[j][0]+'</code><span style="color:#8b949e">'+eps[j][1]+'</span></div>';}
   h+='</div></div></details>';
   return h;
 }
@@ -877,7 +877,7 @@ function showModelInfo(key,idx,ev){
 }
 function positionTip(tip,ev){
   var r=ev.target.getBoundingClientRect();
-  tip.style.left=Math.min(r.left,window.innerWidth-380)+"px";
+  tip.style.left=Math.max(4,Math.min(r.left,window.innerWidth-380))+"px";
   tip.style.top=(r.bottom+6)+"px";
   tip.style.display="block";
 }
@@ -886,7 +886,7 @@ function showTip(el,text){
   tip.innerHTML=esc(text);
   tip.style.display="block";
   var r=el.getBoundingClientRect();
-  tip.style.left=Math.min(r.left,window.innerWidth-380)+"px";
+  tip.style.left=Math.max(4,Math.min(r.left,window.innerWidth-380))+"px";
   tip.style.top=(r.bottom+6)+"px";
 }
 function hideInfo(){var tip=document.getElementById("d-tip");if(tip)tip.style.display="none";}
